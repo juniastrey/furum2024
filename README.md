@@ -91,7 +91,7 @@ A useful tip (thanks to @DarrowWolf) is to use a smooth plate and have the name 
 
 Some pre-requisites:
 - All images MUST be 400px by 400px. (I was lazy to parameterise this.)
-- As none of the names I printed had reserved characters, the image's filename (without extension) is just he name displayed on the keychain.
+- As none of the names I printed had reserved characters, the image's filename (without extension) is just the name displayed on the keychain.
 
 To get started:
 

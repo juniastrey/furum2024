@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>furum2024</title>
+    <style>
+      body {
+        background: black;
+        color: orange;
+        cursor: none;
+        font-family: monospace;
+        font-size: calc(100vh / 15);
+        margin: 0;
+        overflow: hidden;
+      }
+
+      .overlay {
+        height: 100vh;
+        left: 0;
+        position: absolute;
+        top: 0;
+        width: 100vw;
+      }
+
+      .config {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 10;
+      }
+
+      #animation-config {
+        background: rgba(128, 0, 0, 0.9);
+      }
+
+      #ears-config {
+        background: rgba(0, 128, 0, 0.9);
+      }
+
+      #eyes-config {
+        background: rgba(0, 0, 128, 0.9);
+      }
+
+      #both-config {
+        background: rgba(128, 128, 0, 0.9);
+      }
+
+      #prompt {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 20;
+      }
+
+      #prompt-input {
+        font-size: 5rem;
+        margin: 10vw;
+        width: 80vw;
+      }
+
+      #grid-parent,
+      #mcq-parent {
+        background: rgba(0, 0, 0, 0.9);
+        display: none;
+      }
+
+      .grid {
+        display: grid;
+        margin: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .grid img {
+        width: calc(100% - 10px);
+        height: auto;
+        border: 5px solid transparent;
+      }
+
+      .grid img:focus {
+        border: 5px solid orange;
+        outline: none;
+      }
+
+      .mcq {
+        display: grid;
+        margin: 10px;
+        gap: 10px;
+      }
+
+      .mcq div {
+        width: calc(100% - 10px);
+        height: auto;
+        border: 5px solid transparent;
+      }
+
+      .mcq div:focus {
+        border: 5px solid orange;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="animation" class="overlay"></canvas>
+
+    <div id="animation-config" class="overlay config">Animation Config</div>
+    <div id="ears-config" class="overlay config">Ears Config</div>
+    <div id="eyes-config" class="overlay config">Eyes Config</div>
+    <div id="both-config" class="overlay config">Both Config</div>
+
+    <div id="prompt" class="overlay">
+      <input id="prompt-input" type="text" />
+    </div>
+
+    <div id="grid-parent" class="overlay">
+      <div id="grid" class="grid"></div>
+    </div>
+
+    <div id="mcq-parent" class="overlay">
+      <div id="mcq" class="mcq"></div>
+    </div>
+
+    <script>
+      let state = "home";
+      const apikey = "{{ apikey }}";
+      const engineid = "{{ engineid }}";
+
+      let print_user = null;
+      let print_image = null;
+      // let print_offence = null;
+
+      const canvas = document.getElementById("animation");
+      const context = canvas.getContext("2d");
+
+      const resizeCanvas = () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+      };
+      resizeCanvas();
+      window.addEventListener("resize", resizeCanvas);
+
+      const animationConfig = document.getElementById("animation-config");
+      const earsConfig = document.getElementById("ears-config");
+      const eyesConfig = document.getElementById("eyes-config");
+      const bothConfig = document.getElementById("both-config");
+
+      const frameRate = 24;
+      const asciiWidth = 93;
+      const asciiHeight = 15;
+      const repeat = 2;
+      let currentVideo = 0;
+      let startTime = null;
+      let cycle = true;
+
+      // ANSI color map (basic terminal colors)
+      const ansiColors = {
+        30: "#000000", // Black
+        31: "#FF0000", // Red
+        32: "#00FF00", // Green
+        33: "#FFFF00", // Yellow
+        34: "#0000FF", // Blue
+        35: "#FF00FF", // Magenta
+        36: "#00FFFF", // Cyan
+        37: "#FFFFFF", // White
+        90: "#808080", // Bright Black (Gray)
+        91: "#FF8080", // Bright Red
+        92: "#80FF80", // Bright Green
+        93: "#FFFF80", // Bright Yellow
+        94: "#8080FF", // Bright Blue
+        95: "#FF80FF", // Bright Magenta
+        96: "#80FFFF", // Bright Cyan
+        97: "#FFFFFF", // Bright White
+      };
+
+      // Draw ASCII art on the canvas
+      const drawAsciiArt = (text) => {
+        const fontSize = canvas.height / asciiHeight;
+        context.font = `${fontSize}px monospace`;
+        context.textBaseline = "top";
+
+        const lines = text.split("\n");
+        let y = 0;
+        let x = 0;
+        let currentColor = "#FFFFFF"; // Default color
+
+        lines.forEach((line) => {
+          x = fontSize / 4;
+          const segments = line.split(/(\x1b\[[\d;]+m)/); // Split by ANSI escape codes
+          segments.forEach((segment) => {
+            if (segment === "\x1b[H") return;
+            if (segment.startsWith("\x1b[")) {
+              const codes = segment.match(/\d+/g);
+              const colorCode = codes[0];
+              if (colorCode == 38 && codes.length == 5 && codes[1] == 2) {
+                // Limit to green for matrix effect
+                currentColor = `rgb(0, ${codes[3]}, 0)`;
+              } else {
+                currentColor = ansiColors[colorCode] || "#FFFFFF";
+              }
+            } else {
+              context.fillStyle = currentColor;
+              context.fillText(segment, x, y);
+              x += canvas.width / asciiWidth;
+              // x += context.measureText(segment).width;
+            }
+          });
+          y += fontSize; // Move to the next line
+        });
+      };
+
+      // Redraw the canvas continuously
+      const animate = (time) => {
+        context.save();
+
+        context.fillStyle = "rgba(0, 0, 0, 0.2)";
+        context.fillRect(0, 0, canvas.width, canvas.height);
+
+        let currentVideoName = videoNames[currentVideo];
+        let currentLength = videos[currentVideoName].length;
+        if (startTime === null) startTime = time;
+        let frame = Math.floor(((time - startTime) / 1000) * frameRate);
+        let count = Math.floor(frame / currentLength);
+        if (cycle && count >= repeat) {
+          currentVideo = (currentVideo + 1) % videoNames.length;
+          currentVideoName = videoNames[currentVideo];
+          currentLength = videos[currentVideoName].length;
+          startTime = time;
+          frame = 0;
+          count = 0;
+        } else {
+          frame %= currentLength;
+        }
+
+        drawAsciiArt(videos[currentVideoName][frame]);
+
+        context.restore();
+
+        requestAnimationFrame(animate);
+      };
+
+      const promptDiv = document.getElementById("prompt");
+      const promptInput = document.getElementById("prompt-input");
+
+      function getInput(text = "") {
+        // Show the prompt
+        promptDiv.style.display = "flex";
+        promptInput.value = text;
+        promptInput.focus();
+
+        return new Promise((resolve, reject) => {
+          // Add event listener to capture "Enter" key
+          promptInput.addEventListener("keydown", function handler(event) {
+            if (event.key === "Enter") {
+              // Resolve the promise with the input value
+              resolve(promptInput.value);
+              // Clean up: hide the prompt and remove the listener
+              promptDiv.style.display = "none";
+              promptInput.value = ""; // Clear the input
+              promptInput.removeEventListener("keydown", handler);
+            } else if (event.key == "Escape") {
+              reject();
+              promptDiv.style.display = "none";
+              promptInput.value = ""; // Clear the input
+              promptInput.removeEventListener("keydown", handler);
+            }
+          });
+        });
+      }
+
+      const gridParent = document.getElementById("grid-parent");
+      const grid = document.getElementById("grid");
+
+      const profiles = [
+        "/static/profiles/feline.jpg",
+        "/static/profiles/bear.jpg",
+        "/static/profiles/bird.jpg",
+        "/static/profiles/bull.jpg",
+        "/static/profiles/canine.jpg",
+        "/static/profiles/deer.jpg",
+        "/static/profiles/freakhound.jpg",
+        "/static/profiles/generic.jpg",
+        "/static/profiles/horse.jpg",
+        "/static/profiles/lion.jpg",
+        "/static/profiles/mouse.jpg",
+        "/static/profiles/novabeast.jpg",
+        "/static/profiles/owl.jpg",
+        "/static/profiles/protogen.jpg",
+        "/static/profiles/rabbit.jpg",
+        "/static/profiles/rexouium.jpg",
+        "/static/profiles/sergal.jpg",
+        "/static/profiles/taidum.jpg",
+        "/static/profiles/tiger.jpg",
+        "/static/profiles/winterpaw.jpg",
+        "/static/profiles/wyvern.jpg",
+      ];
+
+      // Display images in a grid
+      const displayImages = (images) => {
+        let first = true;
+        grid.innerHTML = "";
+        images.forEach((img, idx) => {
+          const imgEl = document.createElement("img");
+          imgEl.src = img.image.thumbnailLink;
+          imgEl.alt = `Image ${idx + 1}`;
+          imgEl.tabIndex = 0;
+          grid.appendChild(imgEl);
+          if (first) {
+            imgEl.focus();
+            first = false;
+          }
+        });
+        profiles.forEach((img, idx) => {
+          const imgEl = document.createElement("img");
+          imgEl.src = img;
+          imgEl.alt = `Image ${images.length + idx + 1}`;
+          imgEl.tabIndex = 0;
+          grid.appendChild(imgEl);
+        });
+      };
+
+      const mcqParent = document.getElementById("mcq-parent");
+      const mcq = document.getElementById("mcq");
+
+      const displayMcq = (choices, selected = 0) => {
+        let index = 0;
+        mcq.innerHTML = "";
+        choices.forEach((choice, idx) => {
+          const ele = document.createElement("div");
+          ele.innerText = choice;
+          ele.tabIndex = 0;
+          mcq.appendChild(ele);
+          if (index === selected) {
+            ele.focus();
+          }
+          ++index;
+        });
+      };
+
+      function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+          document.documentElement.requestFullscreen();
+        } else if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+        navigator.keyboard.lock(["Escape"]);
+      }
+
+      // Videos to fetch
+      const videoNames = [
+        "video1.txt",
+        "video2.txt",
+        "video3.txt",
+        "video4.txt",
+        "video5.txt",
+        "video6.txt",
+      ];
+
+      // Preload videos and store contents in an object
+      const videos = {};
+
+      let offences = null;
+
+      // Fetch all files before the page loads
+      async function preload() {
+        try {
+          const responses = await Promise.all(
+            videoNames.map((name) =>
+              fetch(`/static/videos/${name}`).then((res) => res.text())
+            )
+          );
+          videoNames.forEach((name, index) => {
+            videos[name] = responses[index].split("\n\n\n");
+          });
+          await fetch("/static/offences.txt").then((result) => {
+            result.text().then((result) => {
+              offences = result.split("\n");
+            });
+          });
+        } catch (error) {
+          console.error("Error preloading files:", error);
+        }
+      }
+
+      // Ensure files are loaded before the page loads
+      preload().then(() => {
+        // Keyboard navigation
+        document.addEventListener("keydown", (e) => {
+          if (state === "home") {
+            if (e.key === "f") {
+              toggleFullScreen();
+            } else if (e.key === "q") {
+              state = "animation-config";
+              animationConfig.style.display = "flex";
+            } else if (e.key === "w") {
+              state = "ears-config";
+              earsConfig.style.display = "flex";
+            } else if (e.key === "e") {
+              state = "eyes-config";
+              eyesConfig.style.display = "flex";
+            } else if (e.key === "r") {
+              state = "both-config";
+              bothConfig.style.display = "flex";
+            } else if (e.key === "s") {
+              getInput().then(
+                (result) => {
+                  print_user = result;
+                  fetch(
+                    `https://customsearch.googleapis.com/customsearch/v1?cx=${encodeURIComponent(
+                      engineid
+                    )}&key=${encodeURIComponent(
+                      apikey
+                    )}&searchType=image&q=${result}`
+                  ).then((result) => {
+                    result.json().then((result) => {
+                      gridParent.style.display = "block";
+                      displayImages(result.items);
+                      state = "select-image";
+                    });
+                  });
+                },
+                () => {
+                  state = "home";
+                }
+              );
+              state = "prompt";
+              e.preventDefault();
+            } else if (e.key === "p") {
+              getInput()
+                .then((result) => {
+                  fetch(`/print?msg=${encodeURIComponent(result)}`);
+                })
+                .finally(() => {
+                  state = "home";
+                });
+              state = "prompt";
+              e.preventDefault();
+            } else if (e.key === "i") {
+              fetch("/init");
+            }
+          } else if (state === "animation-config") {
+            if (e.key === " ") {
+              cycle = true;
+            } else if (/^[0-9]$/.test(e.key)) {
+              const digit = Number(e.key); // Convert to number
+              if (digit - 1 < videoNames.length) {
+                currentVideo = digit - 1;
+                startTime = null;
+                cycle = false;
+              }
+            }
+            animationConfig.style.display = "none";
+            state = "home";
+          } else if (state === "ears-config") {
+            fetch(`/ears?key=${encodeURIComponent(e.key)}`);
+            earsConfig.style.display = "none";
+            state = "home";
+          } else if (state === "eyes-config") {
+            if (e.key === "6") {
+              getInput()
+                .then((result) => {
+                  fetch(`/eyes?key=6&msg=${encodeURIComponent(result)}`);
+                })
+                .finally(() => {
+                  eyesConfig.style.display = "none";
+                  state = "home";
+                });
+              state = "prompt";
+              e.preventDefault();
+            } else {
+              fetch(`/eyes?key=${encodeURIComponent(e.key)}`);
+              eyesConfig.style.display = "none";
+              state = "home";
+            }
+          } else if (state === "both-config") {
+            fetch(`/both?key=${encodeURIComponent(e.key)}`);
+            bothConfig.style.display = "none";
+            state = "home";
+          } else if (state === "select-image") {
+            const images = Array.from(grid.querySelectorAll("img"));
+            const focusedIndex = images.findIndex(
+              (img) => img === document.activeElement
+            );
+            if (
+              e.key === "ArrowRight" &&
+              focusedIndex >= 0 &&
+              focusedIndex < images.length - 1
+            ) {
+              images[focusedIndex + 1].focus();
+            } else if (e.key === "ArrowLeft" && focusedIndex > 0) {
+              images[focusedIndex - 1].focus();
+            } else if (e.key === "Enter" && focusedIndex >= 0) {
+              print_image = new URL(images[focusedIndex].src).href;
+              gridParent.style.display = "none";
+              mcqParent.style.display = "block";
+              displayMcq(offences, Math.floor(Math.random() * offences.length));
+              state = "select-text";
+            } else if (e.key === "Escape") {
+              gridParent.style.display = "none";
+              state = "home";
+            }
+          } else if (state === "select-text") {
+            const choices = Array.from(mcq.querySelectorAll("div"));
+            const focusedIndex = choices.findIndex(
+              (choice) => choice === document.activeElement
+            );
+            if (
+              e.key === "ArrowDown" &&
+              focusedIndex >= 0 &&
+              focusedIndex < choices.length - 1
+            ) {
+              choices[focusedIndex + 1].focus();
+            } else if (e.key === "ArrowUp" && focusedIndex > 0) {
+              choices[focusedIndex - 1].focus();
+            } else if (e.key === "Enter" && focusedIndex >= 0) {
+              print_offence = choices[focusedIndex].innerText;
+              getInput(print_offence)
+                .then((result) => {
+                  fetch(
+                    `/print2?user=${encodeURIComponent(
+                      print_user
+                    )}&image=${encodeURIComponent(
+                      print_image
+                    )}&offence=${encodeURIComponent(result)}`
+                  );
+                })
+                .finally(() => {
+                  state = "home";
+                });
+              mcqParent.style.display = "none";
+              state = "prompt";
+            }
+          }
+        });
+
+        // Kickoff animation
+        requestAnimationFrame(animate);
+      });
+    </script>
+  </body>
+</html>

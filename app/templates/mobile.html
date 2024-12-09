@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>furum2024 mobile</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    />
+    <style>
+      .grid {
+        display: grid;
+        margin: 10px;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+      }
+
+      .grid img {
+        width: calc(100% - 10px);
+        height: auto;
+        border: 5px solid transparent;
+      }
+
+      .grid img.selected {
+        border: 5px solid orange;
+        outline: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Ears</h1>
+      <div id="ears">
+        <p>
+          <button class="btn btn-primary">0</button>
+          <button class="btn btn-primary">1</button>
+          <button class="btn btn-primary">2</button>
+          <button class="btn btn-primary">3</button>
+          <button class="btn btn-primary">4</button>
+          <button class="btn btn-primary">5</button>
+        </p>
+      </div>
+
+      <hr />
+
+      <h1>Eyes</h1>
+      <div id="eyes">
+        <p>
+          <button class="btn btn-primary">0</button>
+          <button class="btn btn-primary">1</button>
+          <button class="btn btn-primary">2</button>
+          <button class="btn btn-primary">3</button>
+          <button class="btn btn-primary">4</button>
+          <button class="btn btn-primary">5</button>
+        </p>
+        <div class="row">
+          <div class="col-auto"><input type="text" class="form-control" /></div>
+          <div class="col-auto"><button class="btn btn-primary">6</button></div>
+        </div>
+      </div>
+
+      <hr />
+
+      <h1>Both</h1>
+      <div id="both">
+        <p>
+          <button class="btn btn-primary">0</button>
+          <button class="btn btn-primary">1</button>
+          <button class="btn btn-primary">2</button>
+          <button class="btn btn-primary">3</button>
+          <button class="btn btn-primary">4</button>
+          <button class="btn btn-primary">5</button>
+        </p>
+      </div>
+
+      <hr />
+
+      <h1>Reinit</h1>
+      <p><button id="reinit" class="btn btn-primary">Reinit</button></p>
+
+      <hr />
+
+      <h1>Print</h1>
+      <div id="print" class="row">
+        <div class="col-auto"><input type="text" class="form-control" /></div>
+        <div class="col-auto">
+          <button class="btn btn-primary">Print</button>
+        </div>
+      </div>
+
+      <hr />
+
+      <h1>Search</h1>
+      <div class="row">
+        <div class="col-auto">
+          <input id="user" type="text" class="form-control" />
+        </div>
+        <div class="col-auto">
+          <button id="search" class="btn btn-primary">Search</button>
+        </div>
+      </div>
+      <div id="grid" class="grid"></div>
+
+      <hr />
+
+      <p>
+        <input
+          type="file"
+          class="form-control"
+          id="upload"
+          name="upload"
+          accept="image/*"
+        />
+      </p>
+      <p>
+        <button id="upload-clear" class="btn btn-primary">Clear Upload</button>
+      </p>
+
+      <hr />
+
+      <p><button id="random" class="btn btn-primary">Random</button></p>
+      <div class="row">
+        <div class="col-auto">
+          <input
+            list="offences"
+            type="text"
+            id="offence"
+            class="form-control"
+          />
+          <datalist id="offences"> </datalist>
+        </div>
+        <div class="col-auto">
+          <button id="print-offence" class="btn btn-primary">Print</button>
+        </div>
+      </div>
+    </div>
+
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"
+      crossorigin="anonymous"
+    ></script>
+    <script>
+      const apikey = "{{ apikey }}";
+      const engineid = "{{ engineid }}";
+
+      const profiles = [
+        "/static/profiles/feline.jpg",
+        "/static/profiles/bear.jpg",
+        "/static/profiles/bird.jpg",
+        "/static/profiles/bull.jpg",
+        "/static/profiles/canine.jpg",
+        "/static/profiles/deer.jpg",
+        "/static/profiles/freakhound.jpg",
+        "/static/profiles/generic.jpg",
+        "/static/profiles/horse.jpg",
+        "/static/profiles/lion.jpg",
+        "/static/profiles/mouse.jpg",
+        "/static/profiles/novabeast.jpg",
+        "/static/profiles/owl.jpg",
+        "/static/profiles/protogen.jpg",
+        "/static/profiles/rabbit.jpg",
+        "/static/profiles/rexouium.jpg",
+        "/static/profiles/sergal.jpg",
+        "/static/profiles/taidum.jpg",
+        "/static/profiles/tiger.jpg",
+        "/static/profiles/winterpaw.jpg",
+        "/static/profiles/wyvern.jpg",
+      ];
+
+      let offences_text = null;
+
+      let selected = null;
+
+      async function preload() {
+        try {
+          await fetch("/static/offences.txt").then((result) => {
+            result.text().then((result) => {
+              const offences = document.getElementById("offences");
+              offences_text = result.split("\n");
+              offences_text.forEach((offence) => {
+                const option = document.createElement("option");
+                option.value = offence;
+                offences.appendChild(option);
+              });
+            });
+          });
+        } catch (error) {
+          console.error("Error preloading files:", error);
+        }
+      }
+
+      // Ensure videos are loaded before the page loads
+      preload().then(() => {
+        const ears = document.getElementById("ears");
+        const ears_buttons = Array.from(ears.querySelectorAll("button"));
+        ears_buttons.forEach((button) => {
+          button.addEventListener("click", (e) => {
+            fetch(`/ears?key=${encodeURIComponent(e.target.innerText)}`);
+          });
+        });
+
+        const eyes = document.getElementById("eyes");
+        const eyes_buttons = Array.from(eyes.querySelectorAll("button"));
+        const eyes_input = eyes.querySelector("input");
+        eyes_buttons.forEach((button) => {
+          if (button.innerText === "6") {
+            button.addEventListener("click", (e) => {
+              if (eyes_input.value.trim().length !== 0)
+                fetch(
+                  `/eyes?key=${encodeURIComponent(
+                    e.target.innerText
+                  )}&msg=${encodeURIComponent(eyes_input.value)}`
+                );
+            });
+          } else {
+            button.addEventListener("click", (e) => {
+              fetch(`/eyes?key=${encodeURIComponent(e.target.innerText)}`);
+            });
+          }
+        });
+
+        const both = document.getElementById("both");
+        const both_buttons = Array.from(both.querySelectorAll("button"));
+        both_buttons.forEach((button) => {
+          button.addEventListener("click", (e) => {
+            fetch(`/both?key=${encodeURIComponent(e.target.innerText)}`);
+          });
+        });
+
+        document.getElementById("reinit").addEventListener("click", () => {
+          fetch("/init");
+        });
+
+        const print = document.getElementById("print");
+        const print_button = print.querySelector("button");
+        const print_input = print.querySelector("input");
+        print_button.addEventListener("click", (e) => {
+          if (print_input.value.trim().length !== 0)
+            fetch(`/print?msg=${encodeURIComponent(print_input.value)}`);
+        });
+
+        const user = document.getElementById("user");
+        const grid = document.getElementById("grid");
+        document.getElementById("search").addEventListener("click", () => {
+          if (user.value.trim().length === 0) return;
+          fetch(
+            `https://customsearch.googleapis.com/customsearch/v1?cx=${encodeURIComponent(
+              engineid
+            )}&key=${encodeURIComponent(apikey)}&searchType=image&q=${
+              user.value
+            }`
+          ).then((result) => {
+            result.json().then((result) => {
+              selected = null;
+              grid.innerHTML = "";
+              const loop = (img, idx) => {
+                const imgEl = document.createElement("img");
+                imgEl.src =
+                  typeof img === "string" ? img : img.image.thumbnailLink;
+                imgEl.alt = "Image";
+                imgEl.tabIndex = 0;
+                grid.appendChild(imgEl);
+                imgEl.addEventListener("click", (e) => {
+                  if (selected) {
+                    selected.classList.remove("selected");
+                  }
+                  selected = e.target;
+                  e.target.classList.add("selected");
+                });
+              };
+              result.items.forEach(loop);
+              profiles.forEach(loop);
+            });
+          });
+        });
+
+        const upload = document.getElementById("upload");
+        document
+          .getElementById("upload-clear")
+          .addEventListener("click", () => {
+            upload.value = "";
+          });
+
+        const offence = document.getElementById("offence");
+        document.getElementById("random").addEventListener("click", () => {
+          offence.value =
+            offences_text[Math.floor(Math.random() * offences_text.length)];
+        });
+
+        document
+          .getElementById("print-offence")
+          .addEventListener("click", (e) => {
+            if (
+              user.value.trim().length === 0 ||
+              offence.value.trim().length === 0
+            )
+              return;
+            if (upload.value) {
+              const formData = new FormData();
+              formData.append("upload", upload.files[0]);
+              fetch(
+                `/upload?user=${encodeURIComponent(
+                  user.value
+                )}&offence=${encodeURIComponent(offence.value)}`,
+                {
+                  method: "POST",
+                  body: formData,
+                }
+              );
+            } else {
+              if (!selected) return;
+              const image = new URL(selected.src).href;
+              fetch(
+                `/print2?user=${encodeURIComponent(
+                  user.value
+                )}&image=${encodeURIComponent(
+                  image
+                )}&offence=${encodeURIComponent(offence.value)}`
+              );
+            }
+          });
+      });
+    </script>
+  </body>
+</html>
